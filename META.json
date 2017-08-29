@@ -9,7 +9,7 @@
       "Micke Nordin <mikael.nordin@su.se>"
    ],
    "dynamic_config" : 0,
-   "generated_by" : "Module::Build version 0.4216",
+   "generated_by" : "Module::Build version 0.422",
    "license" : [
       "perl_5"
    ],
@@ -42,6 +42,8 @@
             "Digest::CRC" : "0",
             "IO::Socket" : "0",
             "IO::Socket::INET6" : "0",
+            "IO::Socket::SSL" : "0",
+            "Time::Out" : "0",
             "constant" : "0",
             "perl" : "5.010_000"
          }
@@ -50,23 +52,23 @@
    "provides" : {
       "Nagios::NRPE" : {
          "file" : "lib/Nagios/NRPE.pm",
-         "version" : "v1.0.3"
+         "version" : "v1.0.4"
       },
       "Nagios::NRPE::Client" : {
          "file" : "lib/Nagios/NRPE/Client.pm",
-         "version" : "v1.0.3"
+         "version" : "v1.0.4"
       },
       "Nagios::NRPE::Daemon" : {
          "file" : "lib/Nagios/NRPE/Daemon.pm",
-         "version" : "v1.0.3"
+         "version" : "v1.0.4"
       },
       "Nagios::NRPE::Packet" : {
          "file" : "lib/Nagios/NRPE/Packet.pm",
-         "version" : "v1.0.3"
+         "version" : "v1.0.4"
       },
       "Nagios::NRPE::Utils" : {
          "file" : "lib/Nagios/NRPE/Utils.pm",
-         "version" : "v1.0.3"
+         "version" : "v1.0.4"
       }
    },
    "release_status" : "stable",
@@ -79,5 +81,6 @@
          "url" : "git://github.com/stockholmuniversity/nagios-nrpe.git"
       }
    },
-   "version" : "v1.0.3"
+   "version" : "v1.0.4",
+   "x_serialization_backend" : "JSON::PP version 2.27300_01"
 }

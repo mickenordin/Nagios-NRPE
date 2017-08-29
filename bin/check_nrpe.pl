@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/perl 
 
 =head1 NAME
 
@@ -6,14 +6,16 @@ check_nrpe.pl - An implemetation of the check_nrpe command in pure perl
 
 =head1 SYNOPSIS
 
- Usage: check_nrpe -H <host> -c <command> [ -b <bindaddr> ] [-4] [-6] [-n] [-u] [-p <port>] [-t <timeout>] [-a <arglist...>]
+ Usage: check_nrpe -H <host> -c <command> [ -b <bindaddr> ] [-2] [-4] [-6] [-d] [-n] [-u] [-p <port>] [-t <timeout>] [-a <arglist...>]
 
  Options:
+ -2            = use NRPE v2 only
  -4            = use ipv4 only
  -6            = use ipv6 only
  -H <host>     = The address of the host running the NRPE daemon
  -b <bindaddr> = bind to local address
  -c command    = The name of the command that the remote daemon should run
+ -d            = Disable diffie-hellman ciphers
  -n            = Do no use SSL
  -p [port]     = The port on which the daemon is running (default=5666)
  -t [timeout]  = Number of seconds before connection times out (default=10)
@@ -27,6 +29,10 @@ check_nrpe.pl - An implemetation of the check_nrpe command in pure perl
 Using this script you can request the current status of checks on your remote hosts
 
 It takes the following options
+
+=head2 -2
+
+Use NRPE v2 only
 
 =head2 -4
 
@@ -79,21 +85,25 @@ use Pod::Usage;
 use Data::Dumper;
 use Nagios::NRPE::Client;
 
-our $VERSION = '1.0.3';
+our $VERSION = '1.0.4';
 
 my (
-    $arglist, $bindaddr, $check, $host,    $ipv4,
-    $ipv6,    $port,     $ssl,   $timeout, $unknown
+    $arglist, $bindaddr, $check,  $cipherlist, $host,
+    $ipv4,    $ipv6,     $nrpev2, $port,       $ssl,
+    $timeout, $unknown,  $usedh
 );
 
 Getopt::Long::Configure('no_ignore_case');
 my $result = GetOptions(
+    "2"                 => \$nrpev2,
     "4"                 => \$ipv4,
     "6"                 => \$ipv6,
     "H|host=s"          => \$host,
     "a|arglist"         => \$arglist,
     "b|bindadr=s"       => \$bindaddr,
     "c|command|check=s" => \$check,
+    "d|use-dh=i"        => \$usedh,
+    "L|cipher-list=s"   => \$cipherlist,
     "n|nossl"           => \$ssl,
     "p|port=s"          => \$port,
     "t|timeout=i"       => \$timeout,
@@ -113,26 +123,32 @@ if ($ssl) {
 else {
     $ssl = 1;
 }
-$bindaddr = 0           unless defined $bindaddr;
-$ipv4     = 0           unless defined $ipv4;
-$ipv6     = 0           unless defined $ipv6;
-$unknown  = 0           unless defined $unknown;
-$host     = "localhost" unless defined $host;
-$port     = 5666        unless defined $port;
-$timeout  = 20          unless defined $timeout;
+$bindaddr   = 0                                unless defined $bindaddr;
+$cipherlist = 'ALL:!MD5:@STRENGTH:@SECLEVEL=0' unless defined $cipherlist;
+$host       = "localhost"                      unless defined $host;
+$ipv4       = 0                                unless defined $ipv4;
+$ipv6       = 0                                unless defined $ipv6;
+$nrpev2     = 0                                unless defined $nrpev2;
+$port       = 5666                             unless defined $port;
+$timeout    = 20                               unless defined $timeout;
+$unknown    = 0                                unless defined $unknown;
+$usedh      = 1                                unless defined $usedh;
 
 die "Error: No check was given" unless defined $check;
 my $client = Nagios::NRPE::Client->new(
-    arglist  => \@ARGV,
-    bindaddr => $bindaddr,
-    check    => $check,
-    host     => $host,
-    ipv4     => $ipv4,
-    ipv6     => $ipv6,
-    port     => $port,
-    ssl      => $ssl,
-    timeout  => $timeout,
-    unknown  => $unknown
+    arglist    => \@ARGV,
+    bindaddr   => $bindaddr,
+    cipherlist => $cipherlist,
+    check      => $check,
+    usedh      => $usedh,
+    host       => $host,
+    ipv4       => $ipv4,
+    ipv6       => $ipv6,
+    port       => $port,
+    ssl        => $ssl,
+    v2         => $nrpev2,
+    timeout    => $timeout,
+    unknown    => $unknown
 );
 my $response = $client->run();
 

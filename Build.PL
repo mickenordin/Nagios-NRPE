@@ -31,7 +31,9 @@ my $build = Module::Build->new(
     "constant" => 0,
     "Digest::CRC" => 0,
     "IO::Socket" => 0,
-    "IO::Socket::INET6" => 0
+    "IO::Socket::INET6" => 0,
+    "IO::Socket::SSL" => 0,
+    "Time::Out" => 0
   },
   dynamic_config => 0,
   recursive_test_files => 1,

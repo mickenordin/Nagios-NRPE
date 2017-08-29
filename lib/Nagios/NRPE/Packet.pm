@@ -194,7 +194,7 @@ the same terms as the Perl 5 programming language system itself.
 
 package Nagios::NRPE::Packet;
 
-our $VERSION = '1.0.3';
+our $VERSION = '1.0.4';
 
 use 5.010_000;
 require Exporter;
@@ -279,7 +279,16 @@ sub assemble {
 sub assemble_v3 {
     my ( $self, %options ) = @_;
     my $unpacked = {};
-    my $len      = length( $options{check} ) + 1;
+    my $len      = length( $options{check} );
+
+    # NSClient++ can't handle too short packages, needs to be at least
+    # 1036 bytes total size, otherwise it just hangs so we pad with
+    # zero bytes even for V3 packets
+    if ( $len < 1020 ) {
+        my $times = 1020 - $len;
+        $options{check} .= "\0" x $times;
+        $len = 1020;
+    }
 
     $unpacked->{alignment}      = 0;
     $unpacked->{buffer_length}  = $len;
@@ -371,8 +380,11 @@ sub disassemble {
     if ( $ver eq NRPE_PACKET_VERSION_2 ) {
         $unpacked = $self->disassemble_v2($packet);
     }
-    else {
+    elsif ( $ver eq NRPE_PACKET_VERSION_3 ) {
         $unpacked = $self->disassemble_v3($packet);
+    }
+    else {
+        return_error("Could not disassemble packet, seems invalid");
     }
     return $unpacked;
 }

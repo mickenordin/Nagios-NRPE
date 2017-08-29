@@ -34,7 +34,7 @@ the same terms as the Perl 5 programming language system itself.
 
 package Nagios::NRPE::Client;
 
-our $VERSION = '1.0.3';
+our $VERSION = '1.0.4';
 
 use 5.010_000;
 
@@ -45,6 +45,7 @@ use Data::Dumper;
 use Carp;
 use IO::Socket;
 use IO::Socket::INET6;
+use Time::Out qw(timeout);
 use Nagios::NRPE::Utils qw(return_error);
 use Nagios::NRPE::Packet qw(NRPE_PACKET_VERSION_3
   NRPE_PACKET_VERSION_2
@@ -104,13 +105,17 @@ sub new {
     my $self = {};
     $self->{arglist}  = delete $hash{arglist}  || [];
     $self->{bindaddr} = delete $hash{bindaddr} || 0;
-    $self->{check}    = delete $hash{check}    || "";
-    $self->{host}     = delete $hash{host}     || "localhost";
-    $self->{ipv4}     = delete $hash{ipv4}     || 0;
-    $self->{ipv6}     = delete $hash{ipv6}     || 0;
-    $self->{port}     = delete $hash{port}     || 5666;
-    $self->{ssl}      = delete $hash{ssl}      || 0;
-    $self->{timeout}  = delete $hash{timeout}  || 30;
+    $self->{cipherlist} =
+      delete $hash{cipherlist} || 'ALL:!MD5:@STRENGTH:@SECLEVEL=0';
+    $self->{check}   = delete $hash{check}   || "";
+    $self->{host}    = delete $hash{host}    || "localhost";
+    $self->{ipv4}    = delete $hash{ipv4}    || 0;
+    $self->{ipv6}    = delete $hash{ipv6}    || 0;
+    $self->{port}    = delete $hash{port}    || 5666;
+    $self->{ssl}     = delete $hash{ssl}     || 0;
+    $self->{v2}      = delete $hash{v2}      || 0;
+    $self->{timeout} = delete $hash{timeout} || 30;
+    $self->{usedh}   = delete $hash{usedh}   || 0;
     bless $self, $class;
 }
 
@@ -153,10 +158,18 @@ sub create_socket {
             use IO::Socket::SSL;
         };
 
-        $socket_opts{SSL_cipher_list} = 'ADH';
         $socket_opts{SSL_verify_mode} = SSL_VERIFY_NONE;
         $socket_opts{SSL_version}     = 'TLSv1';
 
+        # Default cipher list when $self->{usedh} = 1;
+        $socket_opts{SSL_cipher_list} = $self->{cipherlist};
+
+        if ( $self->{usedh} eq 0 ) {
+            $socket_opts{SSL_cipher_list} .= ':!ADH';
+        }
+        elsif ( $self->{usedh} eq 2 ) {
+            $socket_opts{SSL_cipher_list} = 'ADH@SECLEVEL=0';
+        }
         $socket = IO::Socket::SSL->new(%socket_opts);
         if ($SSL_ERROR) {
             $reason = "$!,$SSL_ERROR";
@@ -174,8 +187,63 @@ sub create_socket {
     if ( !$socket ) {
         return return_error($reason);
     }
-
     return $socket;
+
+}
+
+=pod
+
+=over 2
+
+=item send_packet()
+
+Send the packet over a socket
+
+=cut
+
+sub send_packet {
+    my ( $self, $version ) = @_;
+    my $check;
+    if ( scalar @{ $self->{arglist} } == 0 ) {
+        $check = $self->{check};
+    }
+    else {
+        $check = join '!', $self->{check}, @{ $self->{arglist} };
+    }
+    my $socket = $self->create_socket();
+    if ( ref $socket eq "HASH" ) {
+        return ($socket);
+    }
+    my $packet = Nagios::NRPE::Packet->new();
+    my $response;
+    my $assembled = $packet->assemble(
+        type    => NRPE_PACKET_QUERY,
+        check   => $check,
+        version => $version
+    );
+    print $socket $assembled;
+    timeout $self->{timeout} => sub {
+        while (<$socket>) {
+            $response .= $_;
+        }
+    };
+    close($socket);
+    if ($response) {
+        my $reply = $packet->disassemble($response);
+        if ( $reply->{buffer} eq
+            "Exception processing request: Invalid packet version.3" )
+        {
+            return return_error(
+                "Remote server does not support Version 3 Packets");
+        }
+        else {
+            return $reply;
+        }
+
+    }
+    else {
+        return return_error("No reply from server");
+    }
 
 }
 
@@ -217,56 +285,15 @@ and this for for NRPE V2:
 
 sub run {
     my ($self) = @_;
-    my $check;
-    if ( scalar @{ $self->{arglist} } == 0 ) {
-        $check = $self->{check};
+    my $version = NRPE_PACKET_VERSION_3;
+    if ( $self->{v2} ) {
+        $version = NRPE_PACKET_VERSION_2;
     }
-    else {
-        $check = join '!', $self->{check}, @{ $self->{arglist} };
+    my $response = $self->send_packet($version);
+    if ( $response->{error} and !$self->{v2} ) {
+        $response = $self->send_packet(NRPE_PACKET_VERSION_2);
     }
-
-    my $socket = $self->create_socket();
-    if ( ref $socket eq "HASH" ) {
-        return ($socket);
-    }
-    my $packet = Nagios::NRPE::Packet->new();
-    my $response;
-    my $assembled = $packet->assemble(
-        type    => NRPE_PACKET_QUERY,
-        check   => $check,
-        version => NRPE_PACKET_VERSION_3
-    );
-    print $socket $assembled;
-    while (<$socket>) {
-        $response .= $_;
-    }
-    close($socket);
-
-    if ( !$response ) {
-        $socket = $self->create_socket();
-        if ( ref $socket eq "REF" ) {
-            return ($socket);
-        }
-        $packet    = Nagios::NRPE::Packet->new();
-        $response  = undef;
-        $assembled = $packet->assemble(
-            type    => NRPE_PACKET_QUERY,
-            check   => $check,
-            version => NRPE_PACKET_VERSION_2
-        );
-
-        print $socket $assembled;
-        while (<$socket>) {
-            $response .= $_;
-        }
-        close($socket);
-
-        if ( !$response ) {
-            my $reason = "No output from remote host";
-            return return_error($reason);
-        }
-    }
-    return $packet->disassemble($response);
+    return $response;
 }
 
 =pod
