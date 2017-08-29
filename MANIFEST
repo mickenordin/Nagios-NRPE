@@ -1,3 +1,4 @@
+.gitignore
 AUTHORS
 bin/check_nrpe.pl
 bin/nrpe-server.pl
@@ -10,6 +11,7 @@ lib/Nagios/NRPE/Packet.pm
 lib/Nagios/NRPE/Utils.pm
 LICENSE
 MANIFEST
+MANIFEST.SKIP
 META.json
 META.yml
 README
